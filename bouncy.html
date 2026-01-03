@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soft Body Physics - Soft Ball</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">Click and drag to interact with the soft ball</div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        canvas.width = 800;
+        canvas.height = 600;
+        
+        // Physics parameters
+        const GRAVITY = 0.5;
+        const BOUNCE = 0.8;
+        const FRICTION = 0.99;
+        const STIFFNESS = 0.03;
+        const PARTICLE_RADIUS = 3;
+        
+        // Soft ball parameters
+        const BALL_RADIUS = 80;
+        const BALL_SEGMENTS = 12;
+        const BALL_CENTER_MASS = 2;
+        const BALL_SURFACE_MASS = 1;
+        
+        // Mouse interaction
+        const mouse = {
+            x: 0,
+            y: 0,
+            prevX: 0,
+            prevY: 0,
+            isDown: false,
+            strength: 1,
+            radius: 100
+        };
+        
+        // Particle class
+        class Particle {
+            constructor(x, y, mass = 1, isPinned = false) {
+                this.x = x;
+                this.y = y;
+                this.prevX = x;
+                this.prevY = y;
+                this.mass = mass;
+                this.isPinned = isPinned;
+                this.radius = PARTICLE_RADIUS;
+            }
+            
+            update() {
+                if (this.isPinned) {
+                    this.x = this.prevX;
+                    this.y = this.prevY;
+                    return;
+                }
+                
+                // Verlet integration
+                const vx = (this.x - this.prevX) * FRICTION;
+                const vy = (this.y - this.prevY) * FRICTION;
+                
+                this.prevX = this.x;
+                this.prevY = this.y;
+                
+                this.x += vx;
+                this.y += vy + GRAVITY;
+                
+                // Boundary collision
+                if (this.x < this.radius) {
+                    this.x = this.radius;
+                    this.prevX = this.x + vx * BOUNCE;
+                }
+                if (this.x > canvas.width - this.radius) {
+                    this.x = canvas.width - this.radius;
+                    this.prevX = this.x + vx * BOUNCE;
+                }
+                if (this.y < this.radius) {
+                    this.y = this.radius;
+                    this.prevY = this.y + vy * BOUNCE;
+                }
+                if (this.y > canvas.height - this.radius) {
+                    this.y = canvas.height - this.radius;
+                    this.prevY = this.y + vy * BOUNCE;
+                }
+            }
+            
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#3498db';
+                ctx.fill();
+                ctx.closePath();
+            }
+        }
+        
+        // Constraint class (spring between two particles)
+        class Constraint {
+            constructor(p1, p2, stiffness = STIFFNESS) {
+                this.p1 = p1;
+                this.p2 = p2;
+                this.length = Math.sqrt(
+                    Math.pow(p2.x - p1.x, 2) + 
+                    Math.pow(p2.y - p1.y, 2)
+                );
+                this.stiffness = stiffness;
+            }
+            
+            update() {
+                const dx = this.p2.x - this.p1.x;
+                const dy = this.p2.y - this.p1.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance === 0) return;
+                
+                const diff = (this.length - distance) / distance;
+                const offsetX = dx * diff * this.stiffness;
+                const offsetY = dy * diff * this.stiffness;
+                
+                const m1 = this.p1.mass + this.p2.mass;
+                const m2 = this.p1.mass / m1;
+                const m3 = this.p2.mass / m1;
+                
+                if (!this.p1.isPinned) {
+                    this.p1.x -= offsetX * m3;
+                    this.p1.y -= offsetY * m3;
+                }
+                
+                if (!this.p2.isPinned) {
+                    this.p2.x += offsetX * m2;
+                    this.p2.y += offsetY * m2;
+                }
+            }
+            
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(this.p1.x, this.p1.y);
+                ctx.lineTo(this.p2.x, this.p2.y);
+                ctx.strokeStyle = 'rgba(52, 152, 219, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+        
+        // Soft body class (collection of particles and constraints)
+        class SoftBody {
+            constructor(x, y, radius, segments) {
+                this.particles = [];
+                this.constraints = [];
+                this.center = new Particle(x, y, BALL_CENTER_MASS);
+                this.radius = radius;
+                
+                // Create surface particles
+                for (let i = 0; i < segments; i++) {
+                    const angle = (i / segments) * Math.PI * 2;
+                    const px = x + Math.cos(angle) * radius;
+                    const py = y + Math.sin(angle) * radius;
+                    this.particles.push(new Particle(px, py, BALL_SURFACE_MASS));
+                }
+                
+                // Create constraints between surface particles
+                for (let i = 0; i < this.particles.length; i++) {
+                    const next = (i + 1) % this.particles.length;
+                    this.constraints.push(new Constraint(this.particles[i], this.particles[next]));
+                    
+                    // Connect surface particles to center
+                    this.constraints.push(new Constraint(this.particles[i], this.center, STIFFNESS * 0.8));
+                }
+                
+                // Add cross constraints for more stability
+                for (let i = 0; i < this.particles.length; i++) {
+                    const next = (i + Math.floor(segments/2)) % this.particles.length;
+                    this.constraints.push(new Constraint(this.particles[i], this.particles[next], STIFFNESS * 0.5));
+                }
+            }
+            
+            update() {
+                // Update center particle first
+                this.center.update();
+                
+                // Update all surface particles
+                for (const particle of this.particles) {
+                    particle.update();
+                }
+                
+                // Apply constraints multiple times for stability
+                for (let i = 0; i < 50; i++) {
+                    for (const constraint of this.constraints) {
+                        constraint.update();
+                    }
+                }
+                
+                // Handle mouse interaction
+                if (mouse.isDown) {
+                    for (const particle of [...this.particles, this.center]) {
+                        const dx = particle.x - mouse.x;
+                        const dy = particle.y - mouse.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < mouse.radius) {
+                            const force = (mouse.radius - distance) / mouse.radius;
+                            particle.x += (mouse.x - mouse.prevX) * force * mouse.strength / particle.mass;
+                            particle.y += (mouse.y - mouse.prevY) * force * mouse.strength / particle.mass;
+                        }
+                    }
+                }
+            }
+            
+            draw() {
+                // Draw constraints first (behind particles)
+                for (const constraint of this.constraints) {
+                    constraint.draw();
+                }
+                
+                // Draw particles
+                this.center.draw();
+                for (const particle of this.particles) {
+                    particle.draw();
+                }
+                
+                // Draw soft body fill
+                ctx.beginPath();
+                ctx.moveTo(this.particles[0].x, this.particles[0].y);
+                for (let i = 1; i < this.particles.length; i++) {
+                    ctx.lineTo(this.particles[i].x, this.particles[i].y);
+                }
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(52, 152, 219, 0.2)';
+                ctx.fill();
+            }
+        }
+        
+        // Create soft body
+        const softBall = new SoftBody(
+            canvas.width / 2,
+            canvas.height / 3,
+            BALL_RADIUS,
+            BALL_SEGMENTS
+        );
+        
+        // Mouse event listeners
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.prevX = mouse.x;
+            mouse.prevY = mouse.y;
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+        
+        canvas.addEventListener('mousedown', () => {
+            mouse.isDown = true;
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            mouse.isDown = false;
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            mouse.isDown = false;
+        });
+        
+        // Animation loop
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            softBall.update();
+            softBall.draw();
+            
+            requestAnimationFrame(animate);
+        }
+        
+        animate();
+    </script>
+</body>
+</html>

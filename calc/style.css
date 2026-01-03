@@ -1,0 +1,67 @@
+*{
+  box-sizing: border-box;
+}
+
+.calculator {
+  width: min-content;
+  border: 1px solid black;
+  border-radius: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  overflow: clip;
+  padding: 1em;
+  color: white;
+  font-weight: 900;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.screen {
+  background-color: rgb(197, 197, 197);
+  height: 5em;
+  box-shadow: 1px 2px 5px 1px rgba(0, 0, 0, 0.466);
+  text-align: right;
+  padding: 1em;
+}
+
+.keys {
+  display: grid;
+  grid-template-areas: 
+  "m7 m8 m9 mC"
+  "m4 m5 m6 mp"
+  "m1 m2 m3 mm"
+  "m0 md mt me";
+  grid-template-rows: 4em 4em 4em 4em;
+  grid-template-columns: 4em 4em 4em 4em;
+  gap: 1em;
+}
+
+.key {
+  border-radius: 15px;
+  box-shadow: 1px 2px 5px 1px rgba(0, 0, 0, 0.466);
+  /* width: 4em; */
+  /* height: 4em; */
+  /* padding: 0.5em 0; */
+  /* width: 1em;
+  height: 1em; */
+  /* align-items: center; */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* width: 100; */
+  background-color: rgb(192, 192, 192);
+  transition: box-shadow ease-in-out 150ms, transform;
+  /* height: 100%; */
+  font-size: 1.5em;
+
+}
+
+.key:hover { 
+  background-color: rgb(151, 151, 151);
+}
+
+.key:active { 
+  transform: scale(0.95);
+  box-shadow: 0px 0px 0px 0px rgba(0, 0, 0, 0.466);
+}
+
